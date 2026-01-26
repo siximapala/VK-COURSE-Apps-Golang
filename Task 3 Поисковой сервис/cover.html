@@ -1,0 +1,439 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>vklec3: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">vklec3/client.go (90.5%)</option>
+				
+				<option value="file1">vklec3/server.go (95.4%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">not covered</span>
+				<span class="cov8">covered</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package main
+
+import (
+        "encoding/json"
+        "errors"
+        "fmt"
+        "io"
+        "net"
+        "net/http"
+        "net/url"
+        "strconv"
+        "time"
+)
+
+//nolint:unused,varcheck
+const (
+        orderAsc = iota
+        orderDesc
+)
+
+//nolint:unused,varcheck
+var (
+        errTest = errors.New("testing")
+        client  = &amp;http.Client{Timeout: time.Second}
+)
+
+type User struct {
+        ID     int
+        Name   string
+        Age    int
+        About  string
+        Gender string
+}
+
+type SearchResponse struct {
+        Users    []User
+        NextPage bool
+}
+
+type SearchErrorResponse struct {
+        Error string
+}
+
+const (
+        OrderByAsc  = 1
+        OrderByAsIs = 0
+        OrderByDesc = -1
+
+        ErrorBadOrderField = `OrderField invalid`
+)
+
+type SearchRequest struct {
+        Limit      int
+        Offset     int    // Можно учесть после сортировки
+        Query      string // подстрока в 1 из полей
+        OrderField string
+        //  1 по возрастанию, 0 как встретилось, -1 по убыванию
+        OrderBy int
+}
+
+type SearchClient struct {
+        // Токен, по которому происходит авторизация на внешней системе, уходит туда через хедер
+        AccessToken string
+        // Урл внешней системы, куда идти
+        URL string
+}
+
+// FindUsers отправляет запрос во внешнюю систему, которая непосредственно ищет пользователей
+func (srv *SearchClient) FindUsers(req SearchRequest) (*SearchResponse, error) <span class="cov8" title="1">{
+
+        searcherParams := url.Values{}
+
+        if req.Limit &lt; 0 </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("limit must be &gt; 0")
+        }</span>
+        <span class="cov8" title="1">if req.Limit &gt; 25 </span><span class="cov0" title="0">{
+                req.Limit = 25
+        }</span>
+        <span class="cov8" title="1">if req.Offset &lt; 0 </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("offset must be &gt; 0")
+        }</span>
+
+        // нужно для получения следующей записи, на основе которой мы скажем - можно показать переключатель следующей страницы или нет
+        <span class="cov8" title="1">req.Limit++
+
+        searcherParams.Add("limit", strconv.Itoa(req.Limit))
+        searcherParams.Add("offset", strconv.Itoa(req.Offset))
+        searcherParams.Add("query", req.Query)
+        searcherParams.Add("order_field", req.OrderField)
+        searcherParams.Add("order_by", strconv.Itoa(req.OrderBy))
+
+        searcherReq, _ := http.NewRequest("GET", srv.URL+"?"+searcherParams.Encode(), nil) //nolint:errcheck
+        searcherReq.Header.Add("AccessToken", srv.AccessToken)
+
+        resp, err := client.Do(searcherReq)
+        if err != nil </span><span class="cov8" title="1">{
+                if err, ok := err.(net.Error); ok &amp;&amp; err.Timeout() </span><span class="cov8" title="1">{
+                        return nil, fmt.Errorf("timeout for %s", searcherParams.Encode())
+                }</span>
+                <span class="cov8" title="1">return nil, fmt.Errorf("unknown error %s", err)</span>
+        }
+        <span class="cov8" title="1">defer resp.Body.Close()
+        body, _ := io.ReadAll(resp.Body) //nolint:errcheck
+
+        switch resp.StatusCode </span>{
+        case http.StatusUnauthorized:<span class="cov8" title="1">
+                return nil, fmt.Errorf("bad AccessToken")</span>
+        case http.StatusInternalServerError:<span class="cov8" title="1">
+                return nil, fmt.Errorf("SearchServer fatal error")</span>
+        case http.StatusBadRequest:<span class="cov8" title="1">
+                errResp := SearchErrorResponse{}
+                err = json.Unmarshal(body, &amp;errResp)
+                if err != nil </span><span class="cov8" title="1">{
+                        return nil, fmt.Errorf("cant unpack error json: %s", err)
+                }</span>
+                <span class="cov8" title="1">if errResp.Error == ErrorBadOrderField </span><span class="cov8" title="1">{
+                        return nil, fmt.Errorf("OrderFeld %s invalid", req.OrderField)
+                }</span>
+                <span class="cov8" title="1">return nil, fmt.Errorf("unknown bad request error: %s", errResp.Error)</span>
+        }
+
+        <span class="cov8" title="1">data := []User{}
+        err = json.Unmarshal(body, &amp;data)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, fmt.Errorf("cant unpack result json: %s", err)
+        }</span>
+
+        <span class="cov8" title="1">result := SearchResponse{}
+        if len(data) == req.Limit </span><span class="cov8" title="1">{
+                result.NextPage = true
+                result.Users = data[0 : len(data)-1]
+        }</span> else<span class="cov8" title="1"> {
+                result.Users = data[0:]
+        }</span>
+
+        <span class="cov8" title="1">return &amp;result, err</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package main
+
+import (
+        "encoding/json"
+        "encoding/xml"
+        "io"
+        "net/http"
+        "os"
+        "sort"
+        "strconv"
+        "strings"
+)
+
+// datasetFile можно менять в тестах
+var datasetFile = "dataset.xml"
+
+type xmlRow struct {
+        ID        int    `xml:"id"`
+        Age       int    `xml:"age"`
+        FirstName string `xml:"first_name"`
+        LastName  string `xml:"last_name"`
+        About     string `xml:"about"`
+        Gender    string `xml:"gender"`
+}
+
+// корневая структура XML: массив записей row, в которых хранятся пользователи
+type xmlRoot struct {
+        Rows []xmlRow `xml:"row"`
+}
+
+func parseIntParam(v string) (int, error) <span class="cov8" title="1">{
+        if v == "" </span><span class="cov8" title="1">{
+                return 0, nil
+        }</span>
+        <span class="cov8" title="1">return strconv.Atoi(v)</span>
+}
+
+func SearchServer(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
+        // читаем параметры
+        //сколько нужно возвращаемых значений
+        limit, err := parseIntParam(r.FormValue("limit"))
+        if err != nil || limit &lt; 0 </span><span class="cov8" title="1">{
+                http.Error(w, "limit must be &gt;= 0", http.StatusBadRequest)
+                return
+        }</span>
+        //смещение пропускает N первых записей
+        <span class="cov8" title="1">offset, err := parseIntParam(r.FormValue("offset"))
+        if err != nil || offset &lt; 0 </span><span class="cov8" title="1">{
+                http.Error(w, "offset must be &gt;= 0", http.StatusBadRequest)
+                return
+        }</span>
+        //поле сортировки
+        <span class="cov8" title="1">orderField := r.FormValue("order_field")
+        //направление сортировки
+        orderByStr := r.FormValue("order_by")
+        // по умолчанию без сортировки
+        orderBy := 0
+        if orderByStr != "" </span><span class="cov8" title="1">{
+                orderBy, err = strconv.Atoi(orderByStr)
+                if err != nil </span><span class="cov8" title="1">{
+                        http.Error(w, "order_by must be integer", http.StatusBadRequest)
+                        return
+                }</span>
+        }
+
+        <span class="cov8" title="1">if orderField == "" </span><span class="cov8" title="1">{
+                orderField = "Name"
+        }</span>
+        <span class="cov8" title="1">ok := orderField == "Id" || orderField == "Age" || orderField == "Name"
+        if !ok </span><span class="cov8" title="1">{
+                w.Header().Set("Content-Type", "application/json")
+                w.WriteHeader(http.StatusBadRequest)
+                json.NewEncoder(w).Encode(SearchErrorResponse{Error: ErrorBadOrderField})
+                return
+        }</span>
+
+        <span class="cov8" title="1">query := r.FormValue("query")
+
+        // читаем xml потоком: парсим по-строчно элементы &lt;row&gt;
+        f, err := os.Open(datasetFile)
+        if err != nil </span><span class="cov8" title="1">{
+                http.Error(w, "internal error", http.StatusInternalServerError)
+                return
+        }</span>
+        <span class="cov8" title="1">defer f.Close()
+
+        dec := xml.NewDecoder(f)
+
+        // Если сортировки нет (orderBy==0), можем странично отдавать результат без хранения всего набора
+        users := make([]User, 0)
+
+        idx := 0
+        collected := 0
+
+        for </span><span class="cov8" title="1">{
+                tok, err := dec.Token()
+                if err != nil </span><span class="cov8" title="1">{
+                        if err == io.EOF </span><span class="cov8" title="1">{
+                                break</span>
+                        }
+                        <span class="cov0" title="0">http.Error(w, "cant unpack xml", http.StatusInternalServerError)
+                        return</span>
+                }
+                //
+                <span class="cov8" title="1">if start, ok := tok.(xml.StartElement); ok &amp;&amp; start.Name.Local == "row" </span><span class="cov8" title="1">{
+                        // Обрабатываем элемент &lt;row&gt;
+                        var xr xmlRow
+                        if err := dec.DecodeElement(&amp;xr, &amp;start); err != nil </span>{<span class="cov0" title="0">
+                                // обработка ошибки
+                        }</span>
+                        // формируем наш элементы User
+                        <span class="cov8" title="1">u := User{
+                                ID:     xr.ID,
+                                Name:   strings.TrimSpace(xr.FirstName + " " + xr.LastName),
+                                Age:    xr.Age,
+                                About:  xr.About,
+                                Gender: xr.Gender,
+                        }
+
+                        // фильтрация по query
+                        if query != "" &amp;&amp; !(strings.Contains(u.Name, query) || strings.Contains(u.About, query)) </span><span class="cov8" title="1">{
+                                continue</span>
+                        }
+
+                        // Вариант 1: сортировка не требуется, применяем offset limit прямо при чтении
+                        <span class="cov8" title="1">if orderBy == 0 </span><span class="cov8" title="1">{
+                                // пропускаем пока не дойдем до offset
+                                if idx &lt; offset </span><span class="cov8" title="1">{
+                                        idx++
+                                        continue</span>
+                                }
+                                <span class="cov8" title="1">users = append(users, u)
+                                collected++
+                                // если установлен лимит и собрали достаточно то можно завершить чтение файла
+                                if limit &gt; 0 &amp;&amp; collected &gt;= limit </span><span class="cov8" title="1">{
+                                        // мы можем прекратить декодирование, т.к. ответ собран
+                                        // закрываем файл и прерываем цикл
+                                        goto RESPOND</span>
+                                }
+                        } else<span class="cov8" title="1"> {
+                                // при сортировке собираем все подходящие записи, чтобы ПОТОМ уже с ними поработать
+                                users = append(users, u)
+                        }</span>
+                }
+        }
+RESPOND:
+
+        // сортировка (уже после того как все записи прочитаны делаем сортировку, т.к. иначе
+        // limit и offset могли дать другой набор записей)
+        <span class="cov8" title="1">if orderBy != 0 </span><span class="cov8" title="1">{
+                asc := orderBy == 1
+                sort.SliceStable(users, func(i, j int) bool </span><span class="cov8" title="1">{
+                        switch orderField </span>{
+                        case "Id":<span class="cov8" title="1">
+                                if asc </span><span class="cov0" title="0">{
+                                        return users[i].ID &lt; users[j].ID
+                                }</span>
+                                <span class="cov8" title="1">return users[i].ID &gt; users[j].ID</span>
+                        case "Age":<span class="cov8" title="1">
+                                if asc </span><span class="cov8" title="1">{
+                                        return users[i].Age &lt; users[j].Age
+                                }</span>
+                                <span class="cov8" title="1">return users[i].Age &gt; users[j].Age</span>
+                        default:<span class="cov8" title="1"> // Name
+                                if asc </span><span class="cov8" title="1">{
+                                        return users[i].Name &lt; users[j].Name
+                                }</span>
+                                <span class="cov0" title="0">return users[i].Name &gt; users[j].Name</span>
+                        }
+                })
+        }
+
+        <span class="cov8" title="1">var result []User
+        if orderBy == 0 </span><span class="cov8" title="1">{
+                result = users
+        }</span> else<span class="cov8" title="1"> {
+                // пагинация offset limit после сортировки
+                start := offset
+                if start &gt; len(users) </span><span class="cov8" title="1">{
+                        start = len(users)
+                }</span>
+                <span class="cov8" title="1">end := len(users)
+                if limit &gt; 0 </span><span class="cov8" title="1">{
+                        end = start + limit
+                        if end &gt; len(users) </span><span class="cov8" title="1">{
+                                end = len(users)
+                        }</span>
+                }
+                <span class="cov8" title="1">result = users[start:end]</span>
+        }
+
+        <span class="cov8" title="1">w.Header().Set("Content-Type", "application/json")
+        w.WriteHeader(http.StatusOK)
+        json.NewEncoder(w).Encode(result)</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
